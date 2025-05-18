@@ -34,6 +34,8 @@ class Program
 
         Console.WriteLine();
         ApplyWaldCriterion(U);
+        Console.WriteLine();
+        ApplyMaximaxCriterion(U);
     }
 
     static void ApplyWaldCriterion(double[,] U)
@@ -77,6 +79,34 @@ class Program
                          .ToArray();
 
         Console.WriteLine($"\nМаксимальний серед мінімальних елементів: {bestVal:F2}");
+        Console.WriteLine("Оптимальні стратегії: " + string.Join(", ", bestStrats));
+    }
+
+    static void ApplyMaximaxCriterion(double[,] U)
+    {
+        int m = U.GetLength(0), n = U.GetLength(1);
+
+        Console.WriteLine("Критерій максимаксу:\n");
+
+        // Максимум у кожному рядку
+        double[] rowMaxs = new double[m];
+        for (int i = 0; i < m; i++)
+            rowMaxs[i] = Enumerable.Range(0, n)
+                                   .Select(j => U[i, j])
+                                   .Max();
+
+        for (int i = 0; i < m; i++)
+            Console.WriteLine($"max в рядку A{i + 1}: {rowMaxs[i]:F2}");
+
+        // Максимальний серед цих максимумів
+        double bestVal = rowMaxs.Max();
+        var bestStrats = rowMaxs
+                         .Select((v, i) => (v, i))
+                         .Where(x => Math.Abs(x.v - bestVal) < 1e-9)
+                         .Select(x => $"A{x.i + 1}")
+                         .ToArray();
+
+        Console.WriteLine($"\nМаксимальний елемент: {bestVal:F2}");
         Console.WriteLine("Оптимальні стратегії: " + string.Join(", ", bestStrats));
     }
 }
