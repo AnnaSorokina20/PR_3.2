@@ -14,8 +14,16 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 2,
           "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
+            },
             {
               "$type": "Document",
               "DocumentIndex": 0,
@@ -24,18 +32,10 @@
               "RelativeDocumentMoniker": "Lab3_2\\Program.cs",
               "ToolTip": "D:\\\u0425\u0410\u0418\\3 \u043A\u0443\u0440\u0441\\2 \u0421\u0435\u043C\u0435\u0441\u0442\u0440\\\u0410\u043B\u0433 \u0421\u0438\u0441\u0442 \u043F\u0440\u0438\u0439\u043D\u044F\u0442\u0442\u044F \u0440\u0456\u0448\u0435\u043D\u044C\\Lab3.2\\Lab3_2\\Lab3_2\\Program.cs",
               "RelativeToolTip": "Lab3_2\\Program.cs",
-              "ViewState": "AgIAAEUAAAAAAAAAAAAYwFQAAAAVAAAAAAAAAA==",
+              "ViewState": "AgIAADEAAAAAAAAAAAAQwDoAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-05-18T11:27:18.58Z",
               "EditorCaption": ""
-            },
-            {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
-            },
-            {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
             }
           ]
         }
