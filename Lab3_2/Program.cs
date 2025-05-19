@@ -9,16 +9,52 @@ class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.InputEncoding = System.Text.Encoding.UTF8;
 
-        // Зчитуємо розміри
-        Console.Write("Введіть кількість стратегій (рядків) m: ");
-        int m = int.Parse(Console.ReadLine() ?? "0");
-        Console.Write("Введіть кількість станів природи (стовпців) n: ");
-        int n = int.Parse(Console.ReadLine() ?? "0");
+        int m = ReadInt("Введіть кількість стратегій (рядків) m: ");
+        int n = ReadInt("Введіть кількість станів природи (стовпців) n: ");
 
-        // Створюємо та заповнюємо матрицю по рядках
-        double[,] U = new double[m, n];
-        Console.WriteLine("\nВведіть кожен рядок матриці корисності U з " +
-                          $"{n} чисел, розділених пробілом:");
+        double[,] U = ReadMatrix(m, n);
+
+        Console.WriteLine();
+
+        var winners = new List<string>();
+
+        winners.AddRange(ApplyWaldCriterion(U));
+        Console.WriteLine();
+        winners.AddRange(ApplyMaximaxCriterion(U));
+        Console.WriteLine();
+        winners.AddRange(ApplyHurwiczCriterion(U));
+        Console.WriteLine();
+        winners.AddRange(ApplySavageCriterion(U));
+
+        double[] p = ReadProbabilities(n);
+
+        Console.WriteLine();
+        winners.AddRange(ApplyBayesCriterion(U, p));
+        Console.WriteLine();
+        winners.AddRange(ApplyLaplaceCriterion(U));
+
+        var mostCommon = winners
+            .GroupBy(s => s)
+            .OrderByDescending(g => g.Count())
+            .First()
+            .Key;
+
+        Console.WriteLine($"\nНайчастіше були оптимальні стратегії: {mostCommon}");
+    }
+
+    static int ReadInt(string prompt)
+    {
+        Console.Write(prompt);
+        return int.Parse(Console.ReadLine() ?? "0", CultureInfo.InvariantCulture);
+    }
+
+
+
+
+    static double[,] ReadMatrix(int m, int n)
+    {
+        Console.WriteLine($"\nВведіть кожен рядок матриці корисності U з {n} чисел, розділених пробілом:");
+        var U = new double[m, n];
         for (int i = 0; i < m; i++)
         {
             Console.Write($"Рядок {i + 1}: ");
@@ -29,107 +65,152 @@ class Program
             if (parts.Length < n)
                 throw new ArgumentException($"Потрібно ввести щонайменше {n} чисел.");
             for (int j = 0; j < n; j++)
-                U[i, j] = double.Parse(parts[j], CultureInfo.InvariantCulture);
+                U[i, j] = double.Parse(parts[j].Replace(',', '.'), CultureInfo.InvariantCulture);
         }
-
-        Console.WriteLine();
-        ApplyWaldCriterion(U);
-        Console.WriteLine();
-        ApplyMaximaxCriterion(U);
-        Console.WriteLine();
-        ApplyHurwiczCriterion(U);
-        Console.WriteLine();
-        ApplySavageCriterion(U);
-
-        //  ЧИТАЄМО ймовірності для критерію Байєса
-        int cols = U.GetLength(1);           
-        Console.WriteLine($"Введіть {cols} ймовірностей p1…pn через пробіл (сума = 1):");
-        double[] p = Console.ReadLine()
-            .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(x => x.Replace(',', '.'))
-            .Select(x => double.Parse(x, CultureInfo.InvariantCulture))
-            .ToArray();
-
-        Console.WriteLine();
-        ApplyBayesCriterion(U, p);
-
-        Console.WriteLine();
-        ApplyLaplaceCriterion(U);
+        return U;
     }
 
-    static void ApplyWaldCriterion(double[,] U)
+    static double[] ReadProbabilities(int n)
+    {
+        Console.WriteLine($"\nВведіть {n} ймовірностей p1…pn через пробіл (сума = 1):");
+        var parts = (Console.ReadLine() ?? "")
+            .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+            .Take(n)
+            .ToArray();
+        if (parts.Length < n)
+            throw new ArgumentException($"Потрібно ввести щонайменше {n} ймовірностей.");
+        return parts
+            .Select(x => double.Parse(x.Replace(',', '.'), CultureInfo.InvariantCulture))
+            .ToArray();
+    }
+
+
+
+    
+    static void PrintBest(string message, double bestVal, int[] bestIndices)
+    {
+        Console.WriteLine($"{message}: {bestVal:F2}");
+        Console.WriteLine("Оптимальні стратегії: " + FormatStrategies(bestIndices));
+    }
+
+    
+    static string FormatStrategies(int[] indices)
+    {
+        return string.Join(", ", indices.Select(i => $"A{i + 1}"));
+    }
+
+    static double[] RowMin(double[,] U)
     {
         int m = U.GetLength(0), n = U.GetLength(1);
+        var mins = new double[m];
+        for (int i = 0; i < m; i++)
+            mins[i] = Enumerable.Range(0, n).Select(j => U[i, j]).Min();
+        return mins;
+    }
 
-        Console.WriteLine("Згенерований протокол обчислення:\n");
+    static double[] RowMax(double[,] U)
+    {
+        int m = U.GetLength(0), n = U.GetLength(1);
+        var maxs = new double[m];
+        for (int i = 0; i < m; i++)
+            maxs[i] = Enumerable.Range(0, n).Select(j => U[i, j]).Max();
+        return maxs;
+    }
 
-        // Заголовок стовпців
-        Console.Write("     ");
+    static int[] ArgEquals(double[] values, double bestVal, double eps = 1e-9)
+    {
+        var list = new List<int>();
+        for (int i = 0; i < values.Length; i++)
+            if (Math.Abs(values[i] - bestVal) < eps)
+                list.Add(i);
+        return list.ToArray();
+    }
+
+    static double[,] ComputeRiskMatrix(double[,] U)
+    {
+        int m = U.GetLength(0), n = U.GetLength(1);
+        var R = new double[m, n];
         for (int j = 0; j < n; j++)
-            Console.Write($"   P{j + 1}");
-        Console.WriteLine();
+        {
+            double colMax = double.MinValue;
+            for (int i = 0; i < m; i++)
+                if (U[i, j] > colMax) colMax = U[i, j];
+            for (int i = 0; i < m; i++)
+                R[i, j] = colMax - U[i, j];
+        }
+        return R;
+    }
 
-        // Вивід матриці з підписами рядків
+    static double[] ExpectedValues(double[,] U, double[] p)
+    {
+        int m = U.GetLength(0), n = U.GetLength(1);
+        var exp = new double[m];
         for (int i = 0; i < m; i++)
         {
-            Console.Write($"A{i + 1}: ");
+            double sum = 0;
             for (int j = 0; j < n; j++)
-                Console.Write($"{U[i, j],6:F2}");
-            Console.WriteLine();
+                sum += U[i, j] * p[j];
+            exp[i] = sum;
         }
+        return exp;
+    }
 
-        // Мінімум у кожному рядку
-        double[] rowMins = new double[m];
+
+    static double[] LaplaceValues(double[,] U)
+    {
+        int m = U.GetLength(0), n = U.GetLength(1);
+        double p = 1.0 / n;
+        var s = new double[m];
         for (int i = 0; i < m; i++)
-            rowMins[i] = Enumerable.Range(0, n)
-                                   .Select(j => U[i, j])
-                                   .Min();
+            s[i] = Enumerable.Range(0, n).Select(j => U[i, j] * p).Sum();
+        return s;
+    }
 
-        Console.WriteLine("\nКритерій Вальда:");
+    static string[] ApplyWaldCriterion(double[,] U)
+    {
+        int m = U.GetLength(0);
+
+        Console.WriteLine("Критерій Вальда:\n");
+
+        // мінімум у кожному рядку
+        double[] mins = RowMin(U);
         for (int i = 0; i < m; i++)
-            Console.WriteLine($"min в рядку A{i + 1}: {rowMins[i]:F2}");
+            Console.WriteLine($"min в рядку A{i + 1}: {mins[i]:F2}");
 
-        // Максимум серед мінімумів
-        double bestVal = rowMins.Max();
-        var bestStrats = rowMins
-                         .Select((v, i) => (v, i))
-                         .Where(x => Math.Abs(x.v - bestVal) < 1e-9)
-                         .Select(x => $"A{x.i + 1}")
-                         .ToArray();
+        // максимальний серед мінімумів
+        double bestVal = mins.Max();
+        int[] bestIdx = ArgEquals(mins, bestVal);
+        string[] bestStrats = bestIdx.Select(i => $"A{i + 1}").ToArray();
 
         Console.WriteLine($"\nМаксимальний серед мінімальних елементів: {bestVal:F2}");
         Console.WriteLine("Оптимальні стратегії: " + string.Join(", ", bestStrats));
+
+        return bestStrats;
     }
 
-    static void ApplyMaximaxCriterion(double[,] U)
+    static string[] ApplyMaximaxCriterion(double[,] U)
     {
-        int m = U.GetLength(0), n = U.GetLength(1);
+        int m = U.GetLength(0);
 
         Console.WriteLine("Критерій максимаксу:\n");
 
-        // Максимум у кожному рядку
-        double[] rowMaxs = new double[m];
+        // максимум у кожному рядку
+        double[] maxs = RowMax(U);
         for (int i = 0; i < m; i++)
-            rowMaxs[i] = Enumerable.Range(0, n)
-                                   .Select(j => U[i, j])
-                                   .Max();
+            Console.WriteLine($"max в рядку A{i + 1}: {maxs[i]:F2}");
 
-        for (int i = 0; i < m; i++)
-            Console.WriteLine($"max в рядку A{i + 1}: {rowMaxs[i]:F2}");
-
-        // Максимальний серед цих максимумів
-        double bestVal = rowMaxs.Max();
-        var bestStrats = rowMaxs
-                         .Select((v, i) => (v, i))
-                         .Where(x => Math.Abs(x.v - bestVal) < 1e-9)
-                         .Select(x => $"A{x.i + 1}")
-                         .ToArray();
+        // максимальний серед максимумів
+        double bestVal = maxs.Max();
+        int[] bestIdx = ArgEquals(maxs, bestVal);
+        string[] bestStrats = bestIdx.Select(i => $"A{i + 1}").ToArray();
 
         Console.WriteLine($"\nМаксимальний елемент: {bestVal:F2}");
         Console.WriteLine("Оптимальні стратегії: " + string.Join(", ", bestStrats));
+
+        return bestStrats;
     }
 
-    static void ApplyHurwiczCriterion(double[,] U)
+    static string[] ApplyHurwiczCriterion(double[,] U)
     {
         int m = U.GetLength(0), n = U.GetLength(1);
 
@@ -138,59 +219,41 @@ class Program
         double y = double.Parse(Console.ReadLine() ?? "0", CultureInfo.CurrentCulture);
         Console.WriteLine();
 
-        // Мінімум і максимум у кожному рядку
-        double[] rowMins = new double[m];
-        double[] rowMaxs = new double[m];
+        // мінімум і максимум у рядках
+        double[] mins = RowMin(U), maxs = RowMax(U);
         for (int i = 0; i < m; i++)
-        {
-            rowMins[i] = Enumerable.Range(0, n).Select(j => U[i, j]).Min();
-            rowMaxs[i] = Enumerable.Range(0, n).Select(j => U[i, j]).Max();
-            Console.WriteLine($"min в рядку A{i + 1}: {rowMins[i]:F2}");
-        }
+            Console.WriteLine($"min в рядку A{i + 1}: {mins[i]:F2}");
         Console.WriteLine();
         for (int i = 0; i < m; i++)
-            Console.WriteLine($"max в рядку A{i + 1}: {rowMaxs[i]:F2}");
+            Console.WriteLine($"max в рядку A{i + 1}: {maxs[i]:F2}");
+        Console.WriteLine();
 
-        Console.WriteLine();
-        // Обчислюємо зважену оцінку s_i = y*min + (1-y)*max
+        // обчислюємо si = y*min + (1−y)*max
         double[] s = new double[m];
         for (int i = 0; i < m; i++)
         {
-            s[i] = y * rowMins[i] + (1 - y) * rowMaxs[i];
-            Console.WriteLine($"s{i + 1} = {y:F1} * {rowMins[i]:F2} + (1 - {y:F1}) * {rowMaxs[i]:F2} = {s[i]:F2}");
+            s[i] = y * mins[i] + (1 - y) * maxs[i];
+            Console.WriteLine($"s{i + 1} = {y:F1} * {mins[i]:F2} + (1 - {y:F1}) * {maxs[i]:F2} = {s[i]:F2}");
         }
 
         double bestVal = s.Max();
-        var bestStrats = s
-                         .Select((v, i) => (v, i))
-                         .Where(x => Math.Abs(x.v - bestVal) < 1e-9)
-                         .Select(x => $"A{x.i + 1}")
-                         .ToArray();
+        int[] bestIdx = ArgEquals(s, bestVal);
+        string[] bestStrats = bestIdx.Select(i => $"A{i + 1}").ToArray();
 
         Console.WriteLine($"\nМаксимальний елемент: {bestVal:F2}");
         Console.WriteLine("Оптимальні стратегії: " + string.Join(", ", bestStrats));
+
+        return bestStrats;
     }
 
-    static void ApplySavageCriterion(double[,] U)
+    static string[] ApplySavageCriterion(double[,] U)
     {
         int m = U.GetLength(0), n = U.GetLength(1);
+
         Console.WriteLine("Критерій Севіджа:\n");
 
-        // Створюємо матрицю ризиків 
-        double[,] R = new double[m, n];
-        for (int j = 0; j < n; j++)
-        {
-            // знаходимо max у стовпці j
-            double colMax = double.MinValue;
-            for (int i = 0; i < m; i++)
-                if (U[i, j] > colMax) colMax = U[i, j];
-
-            // заповнюємо ризики
-            for (int i = 0; i < m; i++)
-                R[i, j] = colMax - U[i, j];
-        }
-
-        // Виводимо матрицю ризиків
+        // обчислюємо матрицю ризиків
+        double[,] R = ComputeRiskMatrix(U);
         Console.WriteLine("Матриця ризиків:");
         for (int i = 0; i < m; i++)
         {
@@ -200,104 +263,80 @@ class Program
         }
         Console.WriteLine();
 
-        //Для кожного рядка знаходимо його максимальний ризик
-        double[] rowMaxRisk = new double[m];
+        // максимум ризику в кожному рядку
+        double[] risks = RowMax(R);
         for (int i = 0; i < m; i++)
-        {
-            rowMaxRisk[i] = Enumerable.Range(0, n)
-                                      .Select(j => R[i, j])
-                                      .Max();
-            Console.WriteLine($"max ризик в рядку A{i + 1}: {rowMaxRisk[i]:F2}");
-        }
+            Console.WriteLine($"max ризик в рядку A{i + 1}: {risks[i]:F2}");
 
-        // Знаходимо мінімум серед цих максимумів — це критерій мінімаксу
-        double bestVal = rowMaxRisk.Min();
-        var bestStrats = rowMaxRisk
-                         .Select((v, i) => (v, i))
-                         .Where(x => Math.Abs(x.v - bestVal) < 1e-9)
-                         .Select(x => $"A{x.i + 1}")
-                         .ToArray();
+        // мінімум серед цих максимумів
+        double bestVal = risks.Min();
+        int[] bestIdx = ArgEquals(risks, bestVal);
+        string[] bestStrats = bestIdx.Select(i => $"A{i + 1}").ToArray();
 
         Console.WriteLine($"\nМінімальний серед максимальних ризиків: {bestVal:F2}");
         Console.WriteLine("Оптимальні стратегії: " + string.Join(", ", bestStrats));
+
+        return bestStrats;
     }
 
-    static void ApplyBayesCriterion(double[,] U, double[] p)
+    static string[] ApplyBayesCriterion(double[,] U, double[] p)
     {
         int m = U.GetLength(0), n = U.GetLength(1);
-        Console.WriteLine("Критерій Байєса:\n");
 
-        // Перевіримо, що кількість ймовірностей збігається з кількістю стовпців
+        Console.WriteLine("Критерій Байєса:\n");
         if (p.Length != n)
         {
             Console.WriteLine("Кількість ймовірностей не відповідає кількості станів природи.");
-            return;
+            return Array.Empty<string>();
         }
 
-        // Виводимо ймовірності
         Console.WriteLine("Ймовірності станів природи:");
         for (int j = 0; j < n; j++)
             Console.WriteLine($"p{j + 1} = {p[j]:F2}");
         Console.WriteLine();
 
-        // Обчислюємо очікуваний виграш для кожної стратегії
-        double[] expected = new double[m];
+        // очікувані значення
+        double[] exp = ExpectedValues(U, p);
         for (int i = 0; i < m; i++)
         {
-            double sum = 0;
-            for (int j = 0; j < n; j++)
-                sum += U[i, j] * p[j];
-            expected[i] = sum;
-            Console.WriteLine($"s{i + 1} = " +
-                string.Join(" + ", Enumerable.Range(0, n)
-                    .Select(j => $"{U[i, j]}*{p[j]:F2}")) +
-                $" = {sum:F2}");
+            var terms = Enumerable.Range(0, n)
+                                  .Select(j => $"{U[i, j]}*{p[j]:F2}");
+            Console.WriteLine($"s{i + 1} = {string.Join(" + ", terms)} = {exp[i]:F2}");
         }
 
-        // Знаходимо максимальне очікуване значення
-        double bestVal = expected.Max();
-        var bestStrats = expected
-            .Select((v, i) => (v, i))
-            .Where(x => Math.Abs(x.v - bestVal) < 1e-9)
-            .Select(x => $"A{x.i + 1}")
-            .ToArray();
+        double bestVal = exp.Max();
+        int[] bestIdx = ArgEquals(exp, bestVal);
+        string[] bestStrats = bestIdx.Select(i => $"A{i + 1}").ToArray();
 
         Console.WriteLine($"\nМаксимальний очікуваний виграш: {bestVal:F2}");
         Console.WriteLine("Оптимальні стратегії: " + string.Join(", ", bestStrats));
+
+        return bestStrats;
     }
 
-    static void ApplyLaplaceCriterion(double[,] U)
+
+    static string[] ApplyLaplaceCriterion(double[,] U)
     {
         int m = U.GetLength(0), n = U.GetLength(1);
+
         Console.WriteLine("Критерій Лапласа:\n");
 
-        double p = 1.0 / n;
-        // Обчислюємо середнє значення для кожної стратегії
-        double[] s = new double[m];
+        double[] s = LaplaceValues(U);
         for (int i = 0; i < m; i++)
         {
-            // формуємо рядок виду "U[i,0]*p + U[i,1]*p + ... "
             var terms = Enumerable.Range(0, n)
-                                  .Select(j => $"{U[i, j]}*{p:F2}");
-            double sum = Enumerable.Range(0, n)
-                                   .Select(j => U[i, j] * p)
-                                   .Sum();
-            s[i] = sum;
-            Console.WriteLine($"s{i + 1} = "
-                + string.Join(" + ", terms)
-                + $" = {sum:F2}");
+                                  .Select(j => $"{U[i, j]}*{1.0 / n:F2}");
+            Console.WriteLine($"s{i + 1} = {string.Join(" + ", terms)} = {s[i]:F2}");
         }
 
-        // Знаходимо максимальне серед цих середніх
         double bestVal = s.Max();
-        var bestStrats = s
-            .Select((v, i) => (v, i))
-            .Where(x => Math.Abs(x.v - bestVal) < 1e-9)
-            .Select(x => $"A{x.i + 1}")
-            .ToArray();
+        int[] bestIdx = ArgEquals(s, bestVal);
+        string[] bestStrats = bestIdx.Select(i => $"A{i + 1}").ToArray();
 
         Console.WriteLine($"\nМаксимальний елемент: {bestVal:F2}");
         Console.WriteLine("Оптимальні стратегії: " + string.Join(", ", bestStrats));
+
+        return bestStrats;
     }
 
 
